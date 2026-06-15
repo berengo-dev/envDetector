@@ -13,6 +13,13 @@ import (
 	"env-doctor/internal/config"
 )
 
+// VersionEntry records a detected version constraint and the manifest source
+// that produced it.
+type VersionEntry struct {
+	Version string // e.g. "8.x" or "1.21"
+	Source  string // subdirectory path + manifest, e.g. "frontend/package.json"
+}
+
 // Detected holds the result of agnostic detection plus metadata used to
 // annotate the generated YAML.
 type Detected struct {
@@ -20,60 +27,117 @@ type Detected struct {
 	ToolComments map[string]string
 	ToolSources  map[string]string
 	FileComments map[string]string
+
+	// New — multi-subdirectory tracking
+	ToolSubdirs   map[string][]string // tool → all subdirectories where found
+	ToolConflicts map[string][]VersionEntry
+	EnvSubdirs    map[string][]string // env_var → subdirectories where .env found
+	FileSubdirs   map[string][]string // file path → subdirectories where found
 }
 
 // Detect inspects the given directory and returns a configuration built from
 // manifest files, local binaries, environment files, and common project files.
 func Detect(dir string) (Detected, error) {
 	d := Detected{
-		Config:       newConfig(),
-		ToolComments: make(map[string]string),
-		ToolSources:  make(map[string]string),
-		FileComments: make(map[string]string),
+		Config:        newConfig(),
+		ToolComments:  make(map[string]string),
+		ToolSources:   make(map[string]string),
+		FileComments:  make(map[string]string),
+		ToolSubdirs:   make(map[string][]string),
+		ToolConflicts: make(map[string][]VersionEntry),
+		EnvSubdirs:    make(map[string][]string),
+		FileSubdirs:   make(map[string][]string),
 	}
 
-	// 1. Extract tools from manifest files.
+	// Discover all scan targets: root first, then subdirectories.
+	subdirs, err := collectSubdirs(dir, defaultSkipList)
+	if err != nil {
+		return Detected{}, err
+	}
+	scanTargets := append([]string{dir}, subdirs...)
+
+	// 1. Extract tools from manifest files in every scan target.
 	extractors := DefaultExtractors()
-	for _, ext := range extractors {
-		for _, pattern := range ext.FilePatterns() {
-			matches, err := filepath.Glob(filepath.Join(dir, pattern))
-			if err != nil {
-				continue
-			}
-			for _, path := range matches {
-				tools, err := ext.Extract(path)
+	for _, subdir := range scanTargets {
+		subRel := relSubdir(dir, subdir)
+
+		for _, ext := range extractors {
+			seenPaths := make(map[string]struct{})
+			for _, pattern := range ext.FilePatterns() {
+				matches, err := filepath.Glob(filepath.Join(subdir, pattern))
 				if err != nil {
-					// Primary manifest files are required to parse correctly.
-					if isPrimaryManifest(filepath.Base(path)) {
-						return Detected{}, err
-					}
 					continue
 				}
-				source := sourceForExtractor(ext, path)
-				comment := commentForExtractor(ext, path)
-				for name, ver := range tools {
-					if _, exists := d.Config.Tools[name]; exists {
+				for _, path := range matches {
+					if _, ok := seenPaths[path]; ok {
 						continue
 					}
-					d.Config.Tools[name] = ver
-					d.ToolSources[name] = source
-					d.ToolComments[name] = comment
+					seenPaths[path] = struct{}{}
+
+					tools, err := ext.Extract(path)
+					if err != nil {
+						// Primary manifest files are required to parse correctly.
+						if isPrimaryManifest(filepath.Base(path)) {
+							return Detected{}, err
+						}
+						continue
+					}
+					source := sourceForExtractor(ext, path)
+					comment := commentForExtractor(ext, path)
+					for name, ver := range tools {
+						d.ToolSubdirs[name] = append(d.ToolSubdirs[name], subRel)
+						if _, exists := d.Config.Tools[name]; exists {
+							continue
+						}
+						d.Config.Tools[name] = ver
+						d.ToolSources[name] = source
+						d.ToolComments[name] = comment
+					}
 				}
 			}
 		}
 	}
 
-	// 2. Extract environment variables.
+	// 2. Extract environment variables from every scan target.
 	_, envScanner, fileScanner := DefaultScanners()
-	d.Config.Env = envScanner.Scan(dir)
+	envSeen := make(map[string]struct{})
+	for _, subdir := range scanTargets {
+		subRel := relSubdir(dir, subdir)
 
-	// 4. Find common project files.
-	d.Config.Files = fileScanner.Scan(dir)
-	for _, f := range d.Config.Files {
-		if isCommonFile(f) {
-			d.FileComments[f] = "Common project file"
-		} else {
-			d.FileComments[f] = "Found in project"
+		vars := envScanner.Scan(subdir)
+		for _, name := range vars {
+			d.EnvSubdirs[name] = append(d.EnvSubdirs[name], subRel)
+			if _, exists := envSeen[name]; exists {
+				continue
+			}
+			d.Config.Env = append(d.Config.Env, name)
+			envSeen[name] = struct{}{}
+		}
+	}
+
+	// 3. Find common project files in every scan target.
+	fileSeen := make(map[string]struct{})
+	for _, subdir := range scanTargets {
+		subRel := relSubdir(dir, subdir)
+
+		files := fileScanner.Scan(subdir)
+		for _, f := range files {
+			relPath := f
+			if subRel != "" {
+				relPath = filepath.Join(subRel, f)
+			}
+			d.FileSubdirs[relPath] = append(d.FileSubdirs[relPath], subRel)
+			if _, exists := fileSeen[relPath]; exists {
+				continue
+			}
+			d.Config.Files = append(d.Config.Files, relPath)
+			fileSeen[relPath] = struct{}{}
+
+			if isCommonFile(f) {
+				d.FileComments[relPath] = "Common project file"
+			} else {
+				d.FileComments[relPath] = "Found in project"
+			}
 		}
 	}
 
@@ -282,6 +346,14 @@ func isPrimaryManifest(name string) bool {
 		return true
 	}
 	return false
+}
+
+func relSubdir(dir, subdir string) string {
+	rel, _ := filepath.Rel(dir, subdir)
+	if rel == "." {
+		return ""
+	}
+	return rel
 }
 
 func isCommonFile(name string) bool {
