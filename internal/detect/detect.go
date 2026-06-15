@@ -49,12 +49,14 @@ func Detect(dir string) (Detected, error) {
 		FileSubdirs:   make(map[string][]string),
 	}
 
-	// Discover all scan targets: root first, then subdirectories.
-	subdirs, err := collectSubdirs(dir, defaultSkipList)
+	// Discover all scan targets: root first, then workspace hints, then the
+	// remaining subdirectories found by WalkDir. Workspace configs are
+	// prioritization hints; WalkDir is still used as a fallback so nothing is
+	// missed.
+	scanTargets, err := buildScanTargets(dir, defaultSkipList)
 	if err != nil {
 		return Detected{}, err
 	}
-	scanTargets := append([]string{dir}, subdirs...)
 
 	// 1. Extract tools from manifest files in every scan target.
 	extractors := DefaultExtractors()

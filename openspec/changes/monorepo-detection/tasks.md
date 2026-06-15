@@ -38,10 +38,10 @@ Chain strategy: pending
 
 ## Phase 2: Workspace-Aware Detection
 
-- [ ] 2.1 Create `parseWorkspaceHints(dir)` in `internal/detect/monorepo.go` — parse `package.json` workspaces (array + object) and `pnpm-workspace.yaml`
-- [ ] 2.2 Write tests: glob expansion, malformed YAML → empty fallback, both configs union
-- [ ] 2.3 Modify `Detect()`: use workspace hints as priority subdirs, fallback WalkDir for remaining
-- [ ] 2.4 Write integration test: stale workspace config still discovers paths outside it
+- [x] 2.1 Create `parseWorkspaceHints(dir)` — parse `package.json` workspaces (array + object) and `pnpm-workspace.yaml`
+- [x] 2.2 Write tests: glob expansion, malformed YAML → empty fallback, both configs union
+- [x] 2.3 Modify `Detect()`: use workspace hints as priority subdirs, fallback WalkDir for remaining
+- [x] 2.4 Write integration test: stale workspace config still discovers paths outside it
 
 ## Phase 3: Version Conflict Detection
 
