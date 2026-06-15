@@ -53,6 +53,6 @@ Chain strategy: pending
 
 ## Phase 4: Subdirectory Binary Resolution
 
-- [ ] 4.1 Extend `Checker.resolveBinary()` in `internal/checker/checker.go` — walk `{workDir}/**/node_modules/.bin/` and `{workDir}/**/.venv/bin/` before PATH fallback
-- [ ] 4.2 Write tests: root binary found (early return), subdir binary found, no binary → PATH fallback
-- [ ] 4.3 Ensure deterministic ordering via sorted WalkDir traversal
+- [x] 4.1 Extend `Checker.resolveBinary()` in `internal/checker/checker.go` — walk `{workDir}/**/node_modules/.bin/` and `{workDir}/**/.venv/bin/` before PATH fallback
+- [x] 4.2 Write tests: root binary found (early return), subdir binary found, no binary → PATH fallback
+- [x] 4.3 Ensure deterministic ordering via sorted WalkDir traversal
