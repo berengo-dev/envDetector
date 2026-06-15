@@ -4,6 +4,7 @@ package version
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -69,6 +70,65 @@ func ConvertSemverToWildcard(constraint string) (string, bool) {
 		return major + "." + minor, true
 	}
 	return major + ".x", true
+}
+
+// Compare returns -1, 0, or 1 depending on whether a is less than, equal to,
+// or greater than b. It parses the leading numeric version core from each
+// string (e.g. "9.x" -> 9, "1.21.5" -> 1.21.5). When only one value parses,
+// the parsed value is considered greater. When neither parses, strings are
+// compared lexicographically.
+func Compare(a, b string) int {
+	parse := func(s string) ([]int, bool) {
+		core := Extract(s)
+		if core == "" {
+			return nil, false
+		}
+		parts := strings.Split(core, ".")
+		out := make([]int, 0, len(parts))
+		for _, p := range parts {
+			n, err := strconv.Atoi(p)
+			if err != nil {
+				return nil, false
+			}
+			out = append(out, n)
+		}
+		return out, len(out) > 0
+	}
+
+	pa, okA := parse(a)
+	pb, okB := parse(b)
+
+	switch {
+	case okA && okB:
+		for i := 0; i < len(pa) || i < len(pb); i++ {
+			var av, bv int
+			if i < len(pa) {
+				av = pa[i]
+			}
+			if i < len(pb) {
+				bv = pb[i]
+			}
+			if av < bv {
+				return -1
+			}
+			if av > bv {
+				return 1
+			}
+		}
+		return 0
+	case okA:
+		return 1
+	case okB:
+		return -1
+	default:
+		if a < b {
+			return -1
+		}
+		if a > b {
+			return 1
+		}
+		return 0
+	}
 }
 
 // Match compares an actual version string (free-form tool output) against an

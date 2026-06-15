@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"env-doctor/internal/checker"
 	"env-doctor/internal/config"
@@ -90,12 +91,14 @@ hardcoding knowledge of specific technology stacks.`,
 		}
 
 		var content string
+		var detected detect.Detected
 		if autoDetect {
-			d, err := detect.Detect(".")
+			var err error
+			detected, err = detect.Detect(".")
 			if err != nil {
 				return err
 			}
-			content, err = detect.Generate(d)
+			content, err = detect.Generate(detected)
 			if err != nil {
 				return fmt.Errorf("generate config: %w", err)
 			}
@@ -108,6 +111,28 @@ hardcoding knowledge of specific technology stacks.`,
 		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
 			return fmt.Errorf("write %s: %w", filename, err)
 		}
+
+		if autoDetect && len(detected.ToolConflicts) > 0 {
+			fmt.Println()
+			fmt.Println("Warnings:")
+			toolNames := make([]string, 0, len(detected.ToolConflicts))
+			for name := range detected.ToolConflicts {
+				toolNames = append(toolNames, name)
+			}
+			sort.Strings(toolNames)
+			for _, name := range toolNames {
+				fmt.Printf("  %s: version conflicts detected\n", name)
+				for _, e := range detected.ToolConflicts[name] {
+					sub := filepath.Dir(e.Source)
+					if sub == "." {
+						sub = "root"
+					}
+					fmt.Printf("    - %s: %s (from %s)\n", sub, e.Version, e.Source)
+				}
+				fmt.Printf("    selected %s (highest version)\n", detected.Config.Tools[name])
+			}
+		}
+
 		return nil
 	},
 }

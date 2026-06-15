@@ -189,8 +189,14 @@ func TestDetectScansWorkspaceDirsFirst(t *testing.T) {
 		t.Fatalf("Detect failed: %v", err)
 	}
 
-	if d.Config.Tools["eslint"] != "8.x" {
-		t.Errorf("Tools[eslint] = %q, want 8.x (workspace dir scanned first)", d.Config.Tools["eslint"])
+	// Workspace prioritization still puts the workspace dir first in the
+	// tracked subdirs, but version conflict detection now stores the highest
+	// conflicting version in Config.Tools.
+	if d.Config.Tools["eslint"] != "9.x" {
+		t.Errorf("Tools[eslint] = %q, want 9.x (highest conflicting version)", d.Config.Tools["eslint"])
+	}
+	if len(d.ToolConflicts["eslint"]) != 2 {
+		t.Errorf("expected 2 conflict entries for eslint, got %v", d.ToolConflicts["eslint"])
 	}
 
 	subdirs := d.ToolSubdirs["eslint"]

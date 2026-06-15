@@ -86,8 +86,10 @@ func Detect(dir string) (Detected, error) {
 					}
 					source := sourceForExtractor(ext, path)
 					comment := commentForExtractor(ext, path)
+					relSource := relSourcePath(dir, path)
 					for name, ver := range tools {
 						d.ToolSubdirs[name] = append(d.ToolSubdirs[name], subRel)
+						d.ToolConflicts[name] = append(d.ToolConflicts[name], VersionEntry{Version: ver, Source: relSource})
 						if _, exists := d.Config.Tools[name]; exists {
 							continue
 						}
@@ -143,6 +145,8 @@ func Detect(dir string) (Detected, error) {
 		}
 	}
 
+	detectConflicts(&d)
+
 	if len(d.Config.Tools) == 0 && len(d.Config.Env) == 0 && len(d.Config.Files) == 0 {
 		return Detected{}, fmt.Errorf("no recognizable project found in %q; run 'env-doctor init' without --auto for a sample config", dir)
 	}
@@ -179,6 +183,11 @@ func Generate(d Detected) (string, error) {
 			firstGroup = false
 			fmt.Fprintf(&b, "  # %s\n", group.source)
 			for _, name := range group.names {
+				if conflicts, ok := d.ToolConflicts[name]; ok {
+					for _, line := range formatConflictComments(name, conflicts, d.Config.Tools[name]) {
+						fmt.Fprintf(&b, "  %s\n", line)
+					}
+				}
 				fmt.Fprintf(&b, "  %q: %q", name, d.Config.Tools[name])
 				if cmt, ok := d.ToolComments[name]; ok && cmt != "" {
 					fmt.Fprintf(&b, "  # %s", cmt)
@@ -356,6 +365,31 @@ func relSubdir(dir, subdir string) string {
 		return ""
 	}
 	return rel
+}
+
+// relSourcePath returns the path of a discovered manifest file relative to
+// the project root, e.g. "frontend/package.json" or "package.json".
+func relSourcePath(dir, path string) string {
+	rel, _ := filepath.Rel(dir, path)
+	if rel == "." {
+		return filepath.Base(path)
+	}
+	return rel
+}
+
+// formatConflictComments returns YAML comment lines describing a version
+// conflict. The caller is responsible for indenting the returned strings.
+func formatConflictComments(tool string, entries []VersionEntry, selected string) []string {
+	lines := []string{"# WARNING: Version conflicts detected"}
+	for _, e := range entries {
+		sub := filepath.Dir(e.Source)
+		if sub == "." {
+			sub = "root"
+		}
+		lines = append(lines, fmt.Sprintf("#   - %s: %s (from %s)", sub, e.Version, e.Source))
+	}
+	lines = append(lines, fmt.Sprintf("# Selected: %s (highest version)", selected))
+	return lines
 }
 
 func isCommonFile(name string) bool {

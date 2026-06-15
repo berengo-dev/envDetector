@@ -70,6 +70,31 @@ func TestMatchLatest(t *testing.T) {
 	}
 }
 
+func TestCompare(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int
+	}{
+		{"8.x", "9.x", -1},
+		{"9.x", "8.x", 1},
+		{"1.21", "1.22", -1},
+		{"1.22", "1.21", 1},
+		{"1.21.5", "1.21.0", 1},
+		{"1.21.0", "1.21.5", -1},
+		{"20.x", "20.x", 0},
+		{"latest", "9.x", -1},
+		{"9.x", "latest", 1},
+		{"alpha", "beta", -1},
+	}
+
+	for _, c := range cases {
+		got := Compare(c.a, c.b)
+		if got != c.want {
+			t.Errorf("Compare(%q, %q) = %d, want %d", c.a, c.b, got, c.want)
+		}
+	}
+}
+
 func TestConvertSemverToWildcard(t *testing.T) {
 	cases := []struct {
 		input  string

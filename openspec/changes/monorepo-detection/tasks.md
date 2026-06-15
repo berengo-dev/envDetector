@@ -45,11 +45,11 @@ Chain strategy: pending
 
 ## Phase 3: Version Conflict Detection
 
-- [ ] 3.1 Create `detectConflicts(d *Detected)` + `highestVersion(versions)` in `internal/detect/monorepo.go`
-- [ ] 3.2 Write tests: same version no conflict, two-way conflict, three-way conflict, highest version selection
-- [ ] 3.3 Wire `detectConflicts` into `Detect()` after all subdirs processed
-- [ ] 3.4 Modify `Generate()` to emit YAML warning comments for tools in `ToolConflicts`
-- [ ] 3.5 Write integration test: conflict detection with real manifests
+- [x] 3.1 Create `detectConflicts(d *Detected)` + `highestVersion(versions)` in `internal/detect/monorepo.go`
+- [x] 3.2 Write tests: same version no conflict, two-way conflict, three-way conflict, highest version selection
+- [x] 3.3 Wire `detectConflicts` into `Detect()` after all subdirs processed
+- [x] 3.4 Modify `Generate()` to emit YAML warning comments for tools in `ToolConflicts`
+- [x] 3.5 Write integration test: conflict detection with real manifests
 
 ## Phase 4: Subdirectory Binary Resolution
 

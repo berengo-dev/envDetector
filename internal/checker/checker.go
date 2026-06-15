@@ -48,9 +48,9 @@ func (osRunner) Run(name string, args ...string) (string, error) {
 
 // Checker runs all checks from a Config.
 type Checker struct {
-	runner      CommandRunner
-	workingDir  string
-	envVars     map[string]string
+	runner     CommandRunner
+	workingDir string
+	envVars    map[string]string
 }
 
 // New returns a Checker that executes real binaries on the local system.

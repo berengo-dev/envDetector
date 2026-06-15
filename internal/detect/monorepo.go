@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+
+	"env-doctor/pkg/version"
 )
 
 // buildScanTargets returns the ordered list of directories to scan for a
@@ -102,4 +104,56 @@ func collectSubdirs(dir string, skipList []string) ([]string, error) {
 
 	sort.Strings(subdirs)
 	return subdirs, nil
+}
+
+// detectConflicts groups tools by name across subdirectories. When all
+// occurrences of a tool share the same version the conflict entry is removed.
+// When versions differ, the entry is kept and Config.Tools is updated to the
+// highest version.
+func detectConflicts(d *Detected) {
+	for name, entries := range d.ToolConflicts {
+		versions := uniqueVersions(entries)
+		if len(versions) <= 1 {
+			delete(d.ToolConflicts, name)
+			continue
+		}
+
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Source < entries[j].Source
+		})
+
+		d.Config.Tools[name] = highestVersion(versions)
+	}
+}
+
+// uniqueVersions returns the distinct versions found in entries, preserving
+// the order of first appearance.
+func uniqueVersions(entries []VersionEntry) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, e := range entries {
+		if _, ok := seen[e.Version]; ok {
+			continue
+		}
+		seen[e.Version] = struct{}{}
+		out = append(out, e.Version)
+	}
+	return out
+}
+
+// highestVersion returns the greatest version according to semantic
+// major/minor/patch comparison. Unparseable values are considered lower than
+// parseable ones; two unparseable values are compared lexicographically.
+func highestVersion(versions []string) string {
+	if len(versions) == 0 {
+		return ""
+	}
+
+	max := versions[0]
+	for _, v := range versions[1:] {
+		if version.Compare(v, max) > 0 {
+			max = v
+		}
+	}
+	return max
 }
