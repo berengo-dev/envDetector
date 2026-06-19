@@ -3,6 +3,7 @@
 package checker
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"net"
@@ -16,6 +17,10 @@ import (
 	"env-doctor/pkg/version"
 	"github.com/joho/godotenv"
 )
+
+// ErrChecksFailed is returned by the check command when one or more checks
+// fail. It allows callers to distinguish check failures from other errors.
+var ErrChecksFailed = errors.New("checker: one or more checks failed")
 
 // Status represents the outcome of a single check.
 type Status string

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,8 +51,10 @@ files, and ports).`,
 }
 
 var checkCmd = &cobra.Command{
-	Use:   "check",
-	Short: "Run all checks from the configuration",
+	Use:           "check",
+	Short:         "Run all checks from the configuration",
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load(cfgFile)
 		if err != nil {
@@ -69,7 +72,7 @@ var checkCmd = &cobra.Command{
 
 		for _, r := range results {
 			if r.Status == checker.StatusFail {
-				os.Exit(1)
+				return checker.ErrChecksFailed
 			}
 		}
 		return nil
@@ -146,7 +149,9 @@ func init() {
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		if !errors.Is(err, checker.ErrChecksFailed) {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		}
 		os.Exit(1)
 	}
 }
