@@ -135,3 +135,24 @@ func TestConvertSemverToWildcardLessThan(t *testing.T) {
 		t.Errorf("ConvertSemverToWildcard(\"<=2.0.0\") = (%q, %v), want (\"2.x\", true)", got, ok)
 	}
 }
+
+func TestExtractSkipsBareNumber(t *testing.T) {
+	got := Extract("Copyright 2024\nVersion 1.2.3")
+	if got != "1.2.3" {
+		t.Errorf("Extract(\"Copyright 2024\\nVersion 1.2.3\") = %q, want \"1.2.3\"", got)
+	}
+}
+
+func TestExtractBareNumberReturnsEmpty(t *testing.T) {
+	got := Extract("Version 1")
+	if got != "" {
+		t.Errorf("Extract(\"Version 1\") = %q, want \"\"", got)
+	}
+}
+
+func TestExtractLastDottedWins(t *testing.T) {
+	got := Extract("0.1 (dev) 1.0.0")
+	if got != "1.0.0" {
+		t.Errorf("Extract(\"0.1 (dev) 1.0.0\") = %q, want \"1.0.0\"", got)
+	}
+}

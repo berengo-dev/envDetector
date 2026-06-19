@@ -8,18 +8,23 @@ import (
 	"strings"
 )
 
-// versionRegex matches the first semantic version-like substring in arbitrary text.
+// versionRegex matches semantic version-like substrings in arbitrary text.
 // Examples: "1.21.5", "20.10.0", "24.0".
 var versionRegex = regexp.MustCompile(`\d+(?:\.\d+)?(?:\.\d+)?`)
 
-// Extract returns the first version-like string found in raw, or an empty string
-// if none is found. The leading "v" prefix, if present, is stripped.
+// Extract returns the last version-like string found in raw that contains at
+// least one dot, or an empty string if none is found. The leading "v" prefix,
+// if present, is stripped. Bare numbers without dots (e.g., copyright years)
+// are ignored.
 func Extract(raw string) string {
-	m := versionRegex.FindString(raw)
-	if m == "" {
-		return ""
+	all := versionRegex.FindAllString(raw, -1)
+	var last string
+	for _, m := range all {
+		if strings.Contains(m, ".") {
+			last = m
+		}
 	}
-	return strings.TrimPrefix(m, "v")
+	return strings.TrimPrefix(last, "v")
 }
 
 // semverConstraintRegex matches common semver constraint prefixes and captures
@@ -79,8 +84,20 @@ func ConvertSemverToWildcard(constraint string) (string, bool) {
 // compared lexicographically.
 func Compare(a, b string) int {
 	parse := func(s string) ([]int, bool) {
+		s = strings.ToLower(strings.TrimSpace(s))
+		// Strip wildcard suffixes so patterns like "9.x" or "20.*" parse as "9" or "20".
+		if idx := strings.LastIndex(s, "."); idx > 0 {
+			suffix := s[idx+1:]
+			if suffix == "x" || suffix == "*" {
+				s = s[:idx]
+			}
+		}
 		core := Extract(s)
 		if core == "" {
+			// Wildcard patterns stripped to a bare major version still need to parse.
+			if n, err := strconv.Atoi(s); err == nil {
+				return []int{n}, true
+			}
 			return nil, false
 		}
 		parts := strings.Split(core, ".")
