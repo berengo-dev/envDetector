@@ -25,7 +25,8 @@ func TestGitignoreIgnoresCompiledBinary(t *testing.T) {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "env-doctor" {
+		// "env-doctor" matches anywhere; "/env-doctor" matches only the root binary.
+		if line == "env-doctor" || line == "/env-doctor" {
 			found = true
 			break
 		}
