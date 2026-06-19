@@ -172,6 +172,7 @@ func (c *Checker) resolveBinary(name string) string {
 	rootCandidates := []string{
 		filepath.Join(c.workingDir, "node_modules", ".bin", name),
 		filepath.Join(c.workingDir, ".venv", "bin", name),
+		filepath.Join(c.workingDir, "venv", "bin", name),
 	}
 	for _, p := range rootCandidates {
 		if _, err := os.Stat(p); err == nil {
@@ -198,12 +199,12 @@ func (c *Checker) resolveBinary(name string) string {
 				matches = append(matches, p)
 			}
 			return filepath.SkipDir
-		case ".venv":
-			p := filepath.Join(path, "bin", name)
+		case "bin":
+			p := filepath.Join(path, name)
 			if _, err := os.Stat(p); err == nil {
 				matches = append(matches, p)
 			}
-			return filepath.SkipDir
+			// Don't skip the directory: deeper nested bin/ dirs may exist.
 		}
 		return nil
 	})

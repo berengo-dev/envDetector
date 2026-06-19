@@ -120,3 +120,37 @@ func TestResolveBinaryVenvSubdirFallback(t *testing.T) {
 		t.Errorf("expected subdir venv binary %q, got %q", subBin, got)
 	}
 }
+
+func TestResolveBinaryVenvNoDot(t *testing.T) {
+	dir := t.TempDir()
+	binPath := filepath.Join(dir, "venv", "bin", "python")
+	if err := os.MkdirAll(filepath.Dir(binPath), 0755); err != nil {
+		t.Fatalf("mkdir venv: %v", err)
+	}
+	if err := os.WriteFile(binPath, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatalf("write venv bin: %v", err)
+	}
+
+	c := &Checker{runner: &mockRunner{}, workingDir: dir}
+	got := c.resolveBinary("python")
+	if got != binPath {
+		t.Errorf("expected venv binary %q, got %q", binPath, got)
+	}
+}
+
+func TestResolveBinaryNonStandardBinDir(t *testing.T) {
+	dir := t.TempDir()
+	binPath := filepath.Join(dir, "tools", "bin", "go")
+	if err := os.MkdirAll(filepath.Dir(binPath), 0755); err != nil {
+		t.Fatalf("mkdir tools bin: %v", err)
+	}
+	if err := os.WriteFile(binPath, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatalf("write tools bin: %v", err)
+	}
+
+	c := &Checker{runner: &mockRunner{}, workingDir: dir}
+	got := c.resolveBinary("go")
+	if got != binPath {
+		t.Errorf("expected tools/bin binary %q, got %q", binPath, got)
+	}
+}
