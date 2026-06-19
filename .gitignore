@@ -1,0 +1,8 @@
+# env-doctor binary
+/env-doctor
+
+# SDD agent artifacts
+.atl/
+
+# Test coverage output
+coverage.out

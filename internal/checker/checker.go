@@ -3,7 +3,9 @@
 package checker
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
@@ -15,6 +17,10 @@ import (
 	"env-doctor/pkg/version"
 	"github.com/joho/godotenv"
 )
+
+// ErrChecksFailed is returned by the check command when one or more checks
+// fail. It allows callers to distinguish check failures from other errors.
+var ErrChecksFailed = errors.New("checker: one or more checks failed")
 
 // Status represents the outcome of a single check.
 type Status string
@@ -48,9 +54,9 @@ func (osRunner) Run(name string, args ...string) (string, error) {
 
 // Checker runs all checks from a Config.
 type Checker struct {
-	runner      CommandRunner
-	workingDir  string
-	envVars     map[string]string
+	runner     CommandRunner
+	workingDir string
+	envVars    map[string]string
 }
 
 // New returns a Checker that executes real binaries on the local system.
@@ -158,14 +164,56 @@ func (c *Checker) checkTool(name, expected string) Result {
 	}
 }
 
-// resolveBinary looks for the binary in node_modules/.bin first, then falls
-// back to the system PATH.
+// resolveBinary looks for the binary in the root-level node_modules/.bin and
+// .venv/bin directories first, then searches those directories in every
+// subdirectory, and finally falls back to the system PATH. Matches are
+// returned in deterministic lexicographic order so resolution is reproducible.
 func (c *Checker) resolveBinary(name string) string {
-	localBin := filepath.Join(c.workingDir, "node_modules", ".bin", name)
-	if _, err := os.Stat(localBin); err == nil {
-		return localBin
+	rootCandidates := []string{
+		filepath.Join(c.workingDir, "node_modules", ".bin", name),
+		filepath.Join(c.workingDir, ".venv", "bin", name),
+		filepath.Join(c.workingDir, "venv", "bin", name),
 	}
-	return name
+	for _, p := range rootCandidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	var matches []string
+	_ = filepath.WalkDir(c.workingDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if path == c.workingDir {
+			return nil
+		}
+		if !d.IsDir() {
+			return nil
+		}
+
+		switch filepath.Base(path) {
+		case "node_modules":
+			p := filepath.Join(path, ".bin", name)
+			if _, err := os.Stat(p); err == nil {
+				matches = append(matches, p)
+			}
+			return filepath.SkipDir
+		case "bin":
+			p := filepath.Join(path, name)
+			if _, err := os.Stat(p); err == nil {
+				matches = append(matches, p)
+			}
+			// Don't skip the directory: deeper nested bin/ dirs may exist.
+		}
+		return nil
+	})
+
+	if len(matches) == 0 {
+		return name
+	}
+	sort.Strings(matches)
+	return matches[0]
 }
 
 func (c *Checker) checkEnv(name string) Result {
@@ -201,7 +249,11 @@ func (c *Checker) checkEnv(name string) Result {
 
 func (c *Checker) checkFile(path string) Result {
 	label := fmt.Sprintf("file: %s", path)
-	_, err := os.Stat(path)
+	fullPath := path
+	if !filepath.IsAbs(path) {
+		fullPath = filepath.Join(c.workingDir, path)
+	}
+	_, err := os.Stat(fullPath)
 	if err != nil {
 		return Result{
 			Name:     label,

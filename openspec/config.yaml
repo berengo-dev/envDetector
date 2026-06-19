@@ -1,0 +1,63 @@
+# env-doctor SDD Configuration
+# Generated: 2026-06-15 by sdd-init (openspec mode)
+
+context: |
+  Go 1.21 CLI tool (cobra, lipgloss, viper, godotenv).
+  Auto-detects project requirements, validates tools, env vars, files, and ports.
+  Entry: cmd/env-doctor/main.go. Packages: internal/{checker,config,detect,ui}, pkg/version.
+  Build: make build / go build. Test: make test / go test ./...
+
+strict_tdd: true
+
+testing:
+  runner: "go test ./..."
+  framework: "testing (stdlib)"
+  layers:
+    unit:
+      available: true
+      tool: "go test"
+    integration:
+      available: false
+      tool: null
+    e2e:
+      available: false
+      tool: null
+  coverage:
+    available: true
+    command: "go test -cover ./..."
+  quality:
+    linter:
+      available: true
+      command: "go vet ./..."
+    type_checker:
+      available: true
+      command: "go build ./..."
+    formatter:
+      available: true
+      command: "gofmt -w ."
+
+phases:
+  explore:
+    description: "Explore SDD ideas, clarify requirements before committing to a change."
+    artifact: openspec/changes/<id>/explore.md
+  propose:
+    description: "Create SDD change proposal with intent, scope, and approach."
+    artifact: openspec/changes/<id>/proposal.md
+  spec:
+    description: "Write SDD delta specs with requirements and scenarios."
+    artifact: openspec/changes/<id>/specs/
+  design:
+    description: "Create technical design and architecture approach."
+    artifact: openspec/changes/<id>/design.md
+  tasks:
+    description: "Break change into implementation tasks."
+    artifact: openspec/changes/<id>/tasks.md
+  apply:
+    description: "Implement tasks from specs and design."
+    artifact: code changes
+  verify:
+    description: "Execute tests and prove implementation matches specs."
+    artifact: test results
+  archive:
+    description: "Archive completed change by syncing delta specs."
+    artifact: openspec/specs/ (merged)

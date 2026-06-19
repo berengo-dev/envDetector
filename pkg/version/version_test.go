@@ -70,6 +70,31 @@ func TestMatchLatest(t *testing.T) {
 	}
 }
 
+func TestCompare(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int
+	}{
+		{"8.x", "9.x", -1},
+		{"9.x", "8.x", 1},
+		{"1.21", "1.22", -1},
+		{"1.22", "1.21", 1},
+		{"1.21.5", "1.21.0", 1},
+		{"1.21.0", "1.21.5", -1},
+		{"20.x", "20.x", 0},
+		{"latest", "9.x", -1},
+		{"9.x", "latest", 1},
+		{"alpha", "beta", -1},
+	}
+
+	for _, c := range cases {
+		got := Compare(c.a, c.b)
+		if got != c.want {
+			t.Errorf("Compare(%q, %q) = %d, want %d", c.a, c.b, got, c.want)
+		}
+	}
+}
+
 func TestConvertSemverToWildcard(t *testing.T) {
 	cases := []struct {
 		input  string
@@ -95,5 +120,39 @@ func TestConvertSemverToWildcard(t *testing.T) {
 		if ok != c.wantOk || got != c.want {
 			t.Errorf("ConvertSemverToWildcard(%q) = (%q, %v), want (%q, %v)", c.input, got, ok, c.want, c.wantOk)
 		}
+	}
+}
+
+func TestConvertSemverToWildcardLessThan(t *testing.T) {
+	got, ok := ConvertSemverToWildcard("<1.0.0")
+	if !ok || got != "1.x" {
+		t.Errorf("ConvertSemverToWildcard(\"<1.0.0\") = (%q, %v), want (\"1.x\", true)", got, ok)
+	}
+
+	// Regression: <= must remain distinct and functional.
+	got, ok = ConvertSemverToWildcard("<=2.0.0")
+	if !ok || got != "2.x" {
+		t.Errorf("ConvertSemverToWildcard(\"<=2.0.0\") = (%q, %v), want (\"2.x\", true)", got, ok)
+	}
+}
+
+func TestExtractSkipsBareNumber(t *testing.T) {
+	got := Extract("Copyright 2024\nVersion 1.2.3")
+	if got != "1.2.3" {
+		t.Errorf("Extract(\"Copyright 2024\\nVersion 1.2.3\") = %q, want \"1.2.3\"", got)
+	}
+}
+
+func TestExtractBareNumberReturnsEmpty(t *testing.T) {
+	got := Extract("Version 1")
+	if got != "" {
+		t.Errorf("Extract(\"Version 1\") = %q, want \"\"", got)
+	}
+}
+
+func TestExtractLastDottedWins(t *testing.T) {
+	got := Extract("0.1 (dev) 1.0.0")
+	if got != "1.0.0" {
+		t.Errorf("Extract(\"0.1 (dev) 1.0.0\") = %q, want \"1.0.0\"", got)
 	}
 }

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"env-doctor/internal/checker"
 	"env-doctor/internal/config"
@@ -49,8 +51,10 @@ files, and ports).`,
 }
 
 var checkCmd = &cobra.Command{
-	Use:   "check",
-	Short: "Run all checks from the configuration",
+	Use:           "check",
+	Short:         "Run all checks from the configuration",
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load(cfgFile)
 		if err != nil {
@@ -68,7 +72,7 @@ var checkCmd = &cobra.Command{
 
 		for _, r := range results {
 			if r.Status == checker.StatusFail {
-				os.Exit(1)
+				return checker.ErrChecksFailed
 			}
 		}
 		return nil
@@ -90,12 +94,14 @@ hardcoding knowledge of specific technology stacks.`,
 		}
 
 		var content string
+		var detected detect.Detected
 		if autoDetect {
-			d, err := detect.Detect(".")
+			var err error
+			detected, err = detect.Detect(".")
 			if err != nil {
 				return err
 			}
-			content, err = detect.Generate(d)
+			content, err = detect.Generate(detected)
 			if err != nil {
 				return fmt.Errorf("generate config: %w", err)
 			}
@@ -108,6 +114,28 @@ hardcoding knowledge of specific technology stacks.`,
 		if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
 			return fmt.Errorf("write %s: %w", filename, err)
 		}
+
+		if autoDetect && len(detected.ToolConflicts) > 0 {
+			fmt.Println()
+			fmt.Println("Warnings:")
+			toolNames := make([]string, 0, len(detected.ToolConflicts))
+			for name := range detected.ToolConflicts {
+				toolNames = append(toolNames, name)
+			}
+			sort.Strings(toolNames)
+			for _, name := range toolNames {
+				fmt.Printf("  %s: version conflicts detected\n", name)
+				for _, e := range detected.ToolConflicts[name] {
+					sub := filepath.Dir(e.Source)
+					if sub == "." {
+						sub = "root"
+					}
+					fmt.Printf("    - %s: %s (from %s)\n", sub, e.Version, e.Source)
+				}
+				fmt.Printf("    selected %s (highest version)\n", detected.Config.Tools[name])
+			}
+		}
+
 		return nil
 	},
 }
@@ -121,7 +149,9 @@ func init() {
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		if !errors.Is(err, checker.ErrChecksFailed) {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		}
 		os.Exit(1)
 	}
 }
