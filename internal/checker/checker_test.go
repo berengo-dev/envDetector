@@ -129,6 +129,25 @@ func TestCheckFile(t *testing.T) {
 	}
 }
 
+func TestCheckFileRelativeToConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(existing, []byte("{}"), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	c := NewWithDir(dir)
+	cfg := config.Config{Files: []string{"config.json"}}
+	results := c.Run(cfg)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != StatusPass {
+		t.Errorf("expected relative file under workingDir to PASS, got %s: %s", results[0].Status, results[0].Message)
+	}
+}
+
 func TestCheckPortFree(t *testing.T) {
 	// Bind to a random port and then release it so the check sees it as free.
 	ln, err := net.Listen("tcp", ":0")

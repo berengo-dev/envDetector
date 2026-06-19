@@ -243,7 +243,11 @@ func (c *Checker) checkEnv(name string) Result {
 
 func (c *Checker) checkFile(path string) Result {
 	label := fmt.Sprintf("file: %s", path)
-	_, err := os.Stat(path)
+	fullPath := path
+	if !filepath.IsAbs(path) {
+		fullPath = filepath.Join(c.workingDir, path)
+	}
+	_, err := os.Stat(fullPath)
 	if err != nil {
 		return Result{
 			Name:     label,
