@@ -122,3 +122,16 @@ func TestConvertSemverToWildcard(t *testing.T) {
 		}
 	}
 }
+
+func TestConvertSemverToWildcardLessThan(t *testing.T) {
+	got, ok := ConvertSemverToWildcard("<1.0.0")
+	if !ok || got != "1.x" {
+		t.Errorf("ConvertSemverToWildcard(\"<1.0.0\") = (%q, %v), want (\"1.x\", true)", got, ok)
+	}
+
+	// Regression: <= must remain distinct and functional.
+	got, ok = ConvertSemverToWildcard("<=2.0.0")
+	if !ok || got != "2.x" {
+		t.Errorf("ConvertSemverToWildcard(\"<=2.0.0\") = (%q, %v), want (\"2.x\", true)", got, ok)
+	}
+}

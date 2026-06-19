@@ -24,7 +24,7 @@ func Extract(raw string) string {
 
 // semverConstraintRegex matches common semver constraint prefixes and captures
 // the operator and the version core.
-var semverConstraintRegex = regexp.MustCompile(`^(?:(\^|~|>=|<=|>|<=|=)\s*)?v?(\d+)(?:\.(\d+))?(?:\.(\d+))?`)
+var semverConstraintRegex = regexp.MustCompile(`^(?:(\^|~|>=|<=|>|<|=)\s*)?v?(\d+)(?:\.(\d+))?(?:\.(\d+))?`)
 
 // ConvertSemverToWildcard converts common semver constraints to a wildcard
 // pattern usable by Match. It returns the wildcard and true on success, or an
