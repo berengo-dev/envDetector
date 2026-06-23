@@ -1,11 +1,13 @@
 package checker
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"env-doctor/internal/config"
@@ -184,5 +186,63 @@ func TestCheckPortOccupied(t *testing.T) {
 	}
 	if results[0].Status != StatusPass {
 		t.Errorf("expected occupied port to PASS, got %s: %s", results[0].Status, results[0].Message)
+	}
+}
+
+func TestClassifyPortError(t *testing.T) {
+	tests := []struct {
+		name    string
+		err     error
+		want    string
+		message string
+	}{
+		{
+			name:    "nil means free",
+			err:     nil,
+			want:    "free",
+			message: "port is free",
+		},
+		{
+			name:    "EADDRINUSE means occupied",
+			err:     &net.OpError{Op: "listen", Net: "tcp", Err: syscall.EADDRINUSE},
+			want:    "occupied",
+			message: "port is occupied",
+		},
+		{
+			name:    "EACCES means permission denied",
+			err:     &net.OpError{Op: "listen", Net: "tcp", Err: syscall.EACCES},
+			want:    "permission denied",
+			message: "port check failed: permission denied",
+		},
+		{
+			name:    "EADDRNOTAVAIL means address not available",
+			err:     &net.OpError{Op: "listen", Net: "tcp", Err: syscall.EADDRNOTAVAIL},
+			want:    "address not available",
+			message: "port check failed: address not available",
+		},
+		{
+			name:    "unknown OpError means failed to check",
+			err:     &net.OpError{Op: "listen", Net: "tcp", Err: errors.New("weird")},
+			want:    "failed to check",
+			message: "port check failed: weird",
+		},
+		{
+			name:    "non-OpError means failed to check",
+			err:     errors.New("boom"),
+			want:    "failed to check",
+			message: "port check failed: boom",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual, message := classifyPortError(tt.err)
+			if actual != tt.want {
+				t.Errorf("classifyPortError(%v) actual = %q, want %q", tt.err, actual, tt.want)
+			}
+			if message != tt.message {
+				t.Errorf("classifyPortError(%v) message = %q, want %q", tt.err, message, tt.message)
+			}
+		})
 	}
 }

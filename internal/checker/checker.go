@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"env-doctor/internal/config"
 	"env-doctor/pkg/version"
@@ -278,21 +279,22 @@ func (c *Checker) checkPort(port int, expected string) Result {
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		if expected == "occupied" {
+		actual, message := classifyPortError(err)
+		if actual == expected {
 			return Result{
 				Name:     label,
 				Status:   StatusPass,
 				Expected: expected,
-				Actual:   "occupied",
-				Message:  "port is listening",
+				Actual:   actual,
+				Message:  message,
 			}
 		}
 		return Result{
 			Name:     label,
 			Status:   StatusFail,
 			Expected: expected,
-			Actual:   "occupied",
-			Message:  "port is in use",
+			Actual:   actual,
+			Message:  message,
 		}
 	}
 	_ = ln.Close()
@@ -313,4 +315,29 @@ func (c *Checker) checkPort(port int, expected string) Result {
 		Actual:   "free",
 		Message:  "port is not listening",
 	}
+}
+
+func classifyPortError(err error) (string, string) {
+	if err == nil {
+		return "free", "port is free"
+	}
+
+	cause := err
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		cause = opErr.Err
+		var errno syscall.Errno
+		if errors.As(opErr.Err, &errno) {
+			switch errno {
+			case syscall.EADDRINUSE:
+				return "occupied", "port is occupied"
+			case syscall.EACCES:
+				return "permission denied", "port check failed: permission denied"
+			case syscall.EADDRNOTAVAIL:
+				return "address not available", "port check failed: address not available"
+			}
+		}
+	}
+
+	return "failed to check", fmt.Sprintf("port check failed: %v", cause)
 }
