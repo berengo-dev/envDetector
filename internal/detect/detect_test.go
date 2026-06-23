@@ -237,6 +237,65 @@ func TestDetectPythonManifestNoVenv(t *testing.T) {
 	}
 }
 
+func TestDetectPythonManifestAllMatched(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "requirements.txt", "flask\npytest\n")
+
+	venvBin := filepath.Join(dir, ".venv", "bin")
+	if err := os.MkdirAll(venvBin, 0755); err != nil {
+		t.Fatalf("mkdir venv bin: %v", err)
+	}
+	writeExecutable(t, venvBin, "flask")
+	writeExecutable(t, venvBin, "pytest")
+
+	d, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect failed: %v", err)
+	}
+	if d.Config.Tools["python"] != "3.x" {
+		t.Errorf("Tools[python] = %q, want 3.x", d.Config.Tools["python"])
+	}
+	if d.Config.Tools["flask"] != "latest" {
+		t.Errorf("Tools[flask] = %q, want latest", d.Config.Tools["flask"])
+	}
+	if d.Config.Tools["pytest"] != "latest" {
+		t.Errorf("Tools[pytest] = %q, want latest", d.Config.Tools["pytest"])
+	}
+}
+
+func TestDetectPythonPyprojectUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pyproject.toml", `[project]
+requires-python = ">=3.10"
+
+[project.dependencies]
+flask = "*"
+pytest = "*"
+`)
+
+	// Only flask has a venv binary; the pyproject.toml branch must NOT filter
+	// by venv executables, so pytest must still be kept.
+	venvBin := filepath.Join(dir, ".venv", "bin")
+	if err := os.MkdirAll(venvBin, 0755); err != nil {
+		t.Fatalf("mkdir venv bin: %v", err)
+	}
+	writeExecutable(t, venvBin, "flask")
+
+	d, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect failed: %v", err)
+	}
+	if d.Config.Tools["python"] != "3.x" {
+		t.Errorf("Tools[python] = %q, want 3.x", d.Config.Tools["python"])
+	}
+	if d.Config.Tools["flask"] != "latest" {
+		t.Errorf("Tools[flask] = %q, want latest", d.Config.Tools["flask"])
+	}
+	if _, ok := d.Config.Tools["pytest"]; !ok {
+		t.Errorf("Tools[pytest] should be present in pyproject.toml branch regardless of venv binaries")
+	}
+}
+
 func TestHasVenvExecutable(t *testing.T) {
 	tests := []struct {
 		name      string
