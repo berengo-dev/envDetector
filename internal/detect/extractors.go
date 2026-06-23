@@ -229,7 +229,7 @@ func (e *PythonExtractor) Extract(path string) (map[string]string, error) {
 				continue
 			}
 			name := strings.TrimSpace(requirementName(line))
-			if name != "" {
+			if name != "" && hasVenvExecutable(dir, name) {
 				tools[name] = "latest"
 			}
 		}
@@ -260,6 +260,15 @@ func (e *PythonExtractor) Extract(path string) (map[string]string, error) {
 	}
 
 	return tools, nil
+}
+
+func hasVenvExecutable(dir, name string) bool {
+	for _, venv := range []string{".venv", "venv"} {
+		if fileExists(filepath.Join(dir, venv, "bin", name)) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasOperatorPrefix(c string) bool {

@@ -170,6 +170,13 @@ func TestDetectPythonManifest(t *testing.T) {
 	writeFile(t, dir, "requirements.txt", "django>=4\npsycopg2\n")
 	writeFile(t, dir, ".env", "SECRET_KEY=\n")
 
+	// Only django has a matching venv binary; psycopg2 should be filtered out.
+	venvBin := filepath.Join(dir, ".venv", "bin")
+	if err := os.MkdirAll(venvBin, 0755); err != nil {
+		t.Fatalf("mkdir venv bin: %v", err)
+	}
+	writeExecutable(t, venvBin, "django")
+
 	d, err := Detect(dir)
 	if err != nil {
 		t.Fatalf("Detect failed: %v", err)
@@ -180,11 +187,128 @@ func TestDetectPythonManifest(t *testing.T) {
 	if d.Config.Tools["django"] != "latest" {
 		t.Errorf("Tools[django] = %q, want latest", d.Config.Tools["django"])
 	}
-	if d.Config.Tools["psycopg2"] != "latest" {
-		t.Errorf("Tools[psycopg2] = %q, want latest", d.Config.Tools["psycopg2"])
+	if _, ok := d.Config.Tools["psycopg2"]; ok {
+		t.Errorf("Tools[psycopg2] should be filtered out")
 	}
 	if len(d.Config.Ports) != 0 {
 		t.Errorf("expected no auto-generated ports, got %v", d.Config.Ports)
+	}
+}
+
+func TestDetectPythonManifestVenvFallback(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "requirements.txt", "flask\npytest\n")
+
+	// No .venv/bin; use venv/bin as fallback.
+	venvBin := filepath.Join(dir, "venv", "bin")
+	if err := os.MkdirAll(venvBin, 0755); err != nil {
+		t.Fatalf("mkdir venv bin: %v", err)
+	}
+	writeExecutable(t, venvBin, "flask")
+
+	d, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect failed: %v", err)
+	}
+	if d.Config.Tools["flask"] != "latest" {
+		t.Errorf("Tools[flask] = %q, want latest", d.Config.Tools["flask"])
+	}
+	if _, ok := d.Config.Tools["pytest"]; ok {
+		t.Errorf("Tools[pytest] should be filtered out")
+	}
+	if d.Config.Tools["python"] != "3.x" {
+		t.Errorf("Tools[python] = %q, want 3.x", d.Config.Tools["python"])
+	}
+}
+
+func TestDetectPythonManifestNoVenv(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "requirements.txt", "django>=4\n")
+
+	d, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect failed: %v", err)
+	}
+	if d.Config.Tools["python"] != "3.x" {
+		t.Errorf("Tools[python] = %q, want 3.x", d.Config.Tools["python"])
+	}
+	if _, ok := d.Config.Tools["django"]; ok {
+		t.Errorf("Tools[django] should be absent when no venv exists")
+	}
+}
+
+func TestHasVenvExecutable(t *testing.T) {
+	tests := []struct {
+		name      string
+		checkName string
+		prep      func(t *testing.T, dir string)
+		want      bool
+	}{
+		{
+			name:      "match in .venv/bin",
+			checkName: "django",
+			prep: func(t *testing.T, dir string) {
+				bin := filepath.Join(dir, ".venv", "bin")
+				os.MkdirAll(bin, 0755)
+				writeExecutableTo(t, dir, bin, "django")
+			},
+			want: true,
+		},
+		{
+			name:      "fallback to venv/bin",
+			checkName: "flask",
+			prep: func(t *testing.T, dir string) {
+				bin := filepath.Join(dir, "venv", "bin")
+				os.MkdirAll(bin, 0755)
+				writeExecutableTo(t, dir, bin, "flask")
+			},
+			want: true,
+		},
+		{
+			name:      ".venv preferred over venv",
+			checkName: "pytest",
+			prep: func(t *testing.T, dir string) {
+				dot := filepath.Join(dir, ".venv", "bin")
+				plain := filepath.Join(dir, "venv", "bin")
+				os.MkdirAll(dot, 0755)
+				os.MkdirAll(plain, 0755)
+				writeExecutableTo(t, dir, dot, "pytest")
+			},
+			want: true,
+		},
+		{
+			name:      "missing binary",
+			checkName: "django",
+			prep: func(t *testing.T, dir string) {
+				bin := filepath.Join(dir, ".venv", "bin")
+				os.MkdirAll(bin, 0755)
+			},
+			want: false,
+		},
+		{
+			name:      "no venv directory",
+			checkName: "django",
+			prep:      func(t *testing.T, dir string) {},
+			want:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tt.prep(t, dir)
+			if got := hasVenvExecutable(dir, tt.checkName); got != tt.want {
+				t.Errorf("hasVenvExecutable(%q, %q) = %v, want %v", dir, tt.checkName, got, tt.want)
+			}
+		})
+	}
+}
+
+func writeExecutableTo(t *testing.T, dir, binDir, name string) {
+	t.Helper()
+	path := filepath.Join(binDir, name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatalf("write executable %s: %v", name, err)
 	}
 }
 
