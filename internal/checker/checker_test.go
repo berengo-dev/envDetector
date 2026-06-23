@@ -1,6 +1,7 @@
 package checker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -15,6 +16,7 @@ import (
 
 type mockRunner struct {
 	outputs map[string]mockResult
+	blocks  map[string]bool
 }
 
 type mockResult struct {
@@ -22,8 +24,15 @@ type mockResult struct {
 	err error
 }
 
-func (m *mockRunner) Run(name string, args ...string) (string, error) {
+func (m *mockRunner) Run(ctx context.Context, name string, args ...string) (string, error) {
 	key := name + " " + strings.Join(args, " ")
+	if m.blocks[key] {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	r, ok := m.outputs[key]
 	if !ok {
 		return "", fmt.Errorf("unknown command: %s", key)
@@ -83,6 +92,87 @@ func TestCheckToolFallbackToVersion(t *testing.T) {
 	}
 	if results[0].Status != StatusPass {
 		t.Errorf("expected PASS, got %s: %s", results[0].Status, results[0].Message)
+	}
+}
+
+func TestCheckToolFastVersion(t *testing.T) {
+	mr := &mockRunner{
+		outputs: map[string]mockResult{
+			"go --version": {out: "go version go1.21.5 linux/amd64"},
+		},
+	}
+	c := NewWithRunner(mr)
+	cfg := config.Config{Tools: map[string]string{"go": "1.21"}}
+	results := c.Run(cfg)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != StatusPass {
+		t.Errorf("expected PASS, got %s: %s", results[0].Status, results[0].Message)
+	}
+}
+
+func TestCheckToolHungVersionCancelled(t *testing.T) {
+	mr := &mockRunner{
+		blocks: map[string]bool{"go --version": true},
+	}
+	c := NewWithRunner(mr)
+	cfg := config.Config{Tools: map[string]string{"go": "1.21"}}
+	results := c.Run(cfg)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != StatusFail {
+		t.Errorf("expected FAIL, got %s: %s", results[0].Status, results[0].Message)
+	}
+	if results[0].Actual != "not found" {
+		t.Errorf("expected Actual 'not found', got %q", results[0].Actual)
+	}
+	if !strings.Contains(results[0].Message, "context deadline exceeded") {
+		t.Errorf("expected deadline message, got %q", results[0].Message)
+	}
+}
+
+func TestCheckToolFallbackSharesContext(t *testing.T) {
+	mr := &mockRunner{
+		outputs: map[string]mockResult{
+			"docker --version": {err: fmt.Errorf("exit status 1")},
+			"docker version":   {out: "Docker version 24.0.7"},
+		},
+	}
+	c := NewWithRunner(mr)
+	cfg := config.Config{Tools: map[string]string{"docker": "24.x"}}
+	results := c.Run(cfg)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != StatusPass {
+		t.Errorf("expected PASS, got %s: %s", results[0].Status, results[0].Message)
+	}
+}
+
+func TestCheckToolFallbackFastFailWhenContextExpired(t *testing.T) {
+	mr := &mockRunner{
+		outputs: map[string]mockResult{
+			"docker version": {out: "Docker version 24.0.7"},
+		},
+		blocks: map[string]bool{"docker --version": true},
+	}
+	c := NewWithRunner(mr)
+	cfg := config.Config{Tools: map[string]string{"docker": "24.x"}}
+	results := c.Run(cfg)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Status != StatusFail {
+		t.Errorf("expected FAIL, got %s: %s", results[0].Status, results[0].Message)
+	}
+	if !strings.Contains(results[0].Message, "context deadline exceeded") {
+		t.Errorf("expected deadline message, got %q", results[0].Message)
 	}
 }
 

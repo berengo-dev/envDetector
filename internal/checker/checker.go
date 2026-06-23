@@ -3,6 +3,7 @@
 package checker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"env-doctor/internal/config"
 	"env-doctor/pkg/version"
@@ -42,13 +44,13 @@ type Result struct {
 
 // CommandRunner abstracts running a binary so tests can inject fake output.
 type CommandRunner interface {
-	Run(name string, args ...string) (string, error)
+	Run(ctx context.Context, name string, args ...string) (string, error)
 }
 
 type osRunner struct{}
 
-func (osRunner) Run(name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+func (osRunner) Run(ctx context.Context, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -122,9 +124,12 @@ func (c *Checker) checkTool(name, expected string) Result {
 	label := fmt.Sprintf("tool: %s", name)
 	binPath := c.resolveBinary(name)
 
-	out, err := c.runner.Run(binPath, "--version")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	out, err := c.runner.Run(ctx, binPath, "--version")
 	if err != nil {
-		out, err = c.runner.Run(binPath, "version")
+		out, err = c.runner.Run(ctx, binPath, "version")
 	}
 	if err != nil {
 		return Result{
